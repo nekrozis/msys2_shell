@@ -25,7 +25,7 @@ jobs:
         strip --strip-all msys2_shell.exe
 
     - name: Upload artifact
-      uses: actions/upload-artifact@latest
+      uses: actions/upload-artifact@v4
       with:
         name: msys2_shell.exe
 
