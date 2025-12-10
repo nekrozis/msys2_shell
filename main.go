@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 )
@@ -182,6 +183,14 @@ func buildShellCommand(cfg Config, shellArgs []string) *exec.Cmd {
 
 func runShell(cfg Config, shellArgs []string) {
 	cmd := buildShellCommand(cfg, shellArgs)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan)
+	go func() {
+		for range sigChan {
+		}
+	}()
+
 	if err := cmd.Run(); err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
 			os.Exit(e.ExitCode())
