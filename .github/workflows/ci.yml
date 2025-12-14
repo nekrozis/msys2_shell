@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build executable
+      shell: cmd
+      run: |
+        set CGO_ENABLED=0
+        set GOOS=windows
+        set GOARCH=amd64
+        set GOAMD64=v3
+        go build -trimpath -ldflags="-s -w" -o msys2_shell.exe
+        strip --strip-all msys2_shell.exe
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: msys2_shell
+        path: msys2_shell.exe
+
