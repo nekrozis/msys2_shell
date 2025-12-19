@@ -105,13 +105,14 @@ func splitOSArgs() ([]string, []string) {
 func parseLauncherFlags(launcherArgs []string) Config {
 	var cfg Config
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fs.StringVar(&cfg.LoginShell, "shell", "", "login shell")
-	fs.StringVar(&cfg.PathType, "pathtype", "", "MSYS2_PATH_TYPE")
+
 	fs.StringVar(&cfg.MsysRoot, "msysroot", "", "MSYS2 root path")
+	fs.StringVar(&cfg.LoginShell, "shell", "", "login shell")
+	fs.StringVar(&cfg.PathType, "pathtype", "", "MSYS2_PATH_TYPE (minimal, strict, inherit)")
+	fs.StringVar(&cfg.MSystem, "msystem", "", "MSYSTEM (if not inferred from executable name)")
+	fs.StringVar(&cfg.Wd, "wd", "", "working directory; not with -home")
+	fs.BoolVar(&cfg.UseHome, "home", false, "start in home directory; not with -wd")
 	fs.BoolVar(&cfg.WinSymlinks, "winsymlinks", false, "enable winsymlinks")
-	fs.StringVar(&cfg.MSystem, "msystem", "", "force MSYSTEM")
-	fs.StringVar(&cfg.Wd, "wd", "", "working directory")
-	fs.BoolVar(&cfg.UseHome, "home", false, "start in home")
 
 	if err := fs.Parse(launcherArgs); err != nil {
 		fatal(err)
@@ -152,7 +153,6 @@ func mergeConfig(base, cli Config) Config {
 
 func resolveMSystem(execName, cli string) string {
 	auto := getMSystemFromExecName(execName)
-
 	if auto != "" && cli != "" {
 		fatal(fmt.Errorf("conflict: exec name implies %s but -msystem flag provides %s", auto, cli))
 	}
