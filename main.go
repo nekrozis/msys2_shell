@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,6 +19,12 @@ type Config struct {
 	WinSymlinks bool
 	MSystem     string
 	Wd          string
+	UseHome     bool
+}
+
+type Spec struct {
+	Cfg       Config
+	ShellArgs []string
 }
 
 var validPathTypes = map[string]bool{
@@ -26,8 +33,8 @@ var validPathTypes = map[string]bool{
 	"inherit": true,
 }
 
-func fatalf(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", a...)
+func fatal(err error) {
+	_, _ = fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
 }
 
@@ -49,24 +56,31 @@ func getMSystemFromExecName(execName string) string {
 	return getMSystemFromName(base)
 }
 
-func loadJSONConfig(path string) (Config, error) {
-	cfg := Config{LoginShell: "bash", PathType: "minimal"}
+func loadJSONConfig(path string) Config {
+	cfg := Config{
+		LoginShell: "bash",
+		PathType:   "minimal",
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return cfg, nil
+			return cfg
 		}
-		return cfg, fmt.Errorf("read config error: %w", err)
+		fatal(fmt.Errorf("read config file failed: %w", err))
 	}
+
 	var tmp struct {
 		LoginShell  string `json:"loginShell,omitempty"`
 		PathType    string `json:"pathType,omitempty"`
 		MsysRoot    string `json:"msysRoot,omitempty"`
 		WinSymlinks bool   `json:"winSymlinks,omitempty"`
 	}
+
 	if err := json.Unmarshal(data, &tmp); err != nil {
-		return cfg, fmt.Errorf("json parse error: %w", err)
+		fatal(fmt.Errorf("parse json config failed: %w", err))
 	}
+
 	if tmp.LoginShell != "" {
 		cfg.LoginShell = tmp.LoginShell
 	}
@@ -75,10 +89,10 @@ func loadJSONConfig(path string) (Config, error) {
 	}
 	cfg.MsysRoot = tmp.MsysRoot
 	cfg.WinSymlinks = tmp.WinSymlinks
-	return cfg, nil
+	return cfg
 }
 
-func splitArgs() (launcherArgs, shellArgs []string) {
+func splitOSArgs() ([]string, []string) {
 	args := os.Args[1:]
 	for i, a := range args {
 		if a == "--" {
@@ -95,46 +109,60 @@ func parseLauncherFlags(launcherArgs []string) Config {
 	fs.StringVar(&cfg.PathType, "pathtype", "", "MSYS2_PATH_TYPE")
 	fs.StringVar(&cfg.MsysRoot, "msysroot", "", "MSYS2 root path")
 	fs.BoolVar(&cfg.WinSymlinks, "winsymlinks", false, "enable winsymlinks")
+	fs.StringVar(&cfg.MSystem, "msystem", "", "force MSYSTEM")
 	fs.StringVar(&cfg.Wd, "wd", "", "working directory")
-	fs.StringVar(&cfg.MSystem, "msystem", "", "MSYSTEM (required if exec name cannot infer)")
-	fs.Parse(launcherArgs)
+	fs.BoolVar(&cfg.UseHome, "home", false, "start in home")
+
+	if err := fs.Parse(launcherArgs); err != nil {
+		fatal(err)
+	}
+
+	if fs.NArg() > 0 {
+		fs.Usage()
+		os.Exit(1)
+	}
+
 	return cfg
 }
 
-func mergeConfig(jsonCfg, cliCfg Config) Config {
-	if cliCfg.LoginShell != "" {
-		jsonCfg.LoginShell = cliCfg.LoginShell
+func mergeConfig(base, cli Config) Config {
+	if cli.LoginShell != "" {
+		base.LoginShell = cli.LoginShell
 	}
-	if cliCfg.PathType != "" {
-		jsonCfg.PathType = cliCfg.PathType
+	if cli.PathType != "" {
+		base.PathType = cli.PathType
 	}
-	if cliCfg.MsysRoot != "" {
-		jsonCfg.MsysRoot = cliCfg.MsysRoot
+	if cli.MsysRoot != "" {
+		base.MsysRoot = cli.MsysRoot
 	}
-	if cliCfg.WinSymlinks {
-		jsonCfg.WinSymlinks = true
+	if cli.WinSymlinks {
+		base.WinSymlinks = true
 	}
-	if cliCfg.Wd != "" {
-		jsonCfg.Wd = cliCfg.Wd
+	if cli.Wd != "" {
+		base.Wd = cli.Wd
 	}
-	if cliCfg.MSystem != "" {
-		jsonCfg.MSystem = cliCfg.MSystem
+	if cli.MSystem != "" {
+		base.MSystem = cli.MSystem
 	}
-	return jsonCfg
+	if cli.UseHome {
+		base.UseHome = true
+	}
+	return base
 }
 
-func resolveMSystem(execName, cliValue string) string {
+func resolveMSystem(execName, cli string) string {
 	auto := getMSystemFromExecName(execName)
-	if auto != "" && cliValue != "" {
-		fatalf("MSYSTEM conflict: exec name implies %s but -msystem provides %s", auto, cliValue)
+
+	if auto != "" && cli != "" {
+		fatal(fmt.Errorf("conflict: exec name implies %s but -msystem flag provides %s", auto, cli))
 	}
-	if auto == "" && cliValue == "" {
-		fatalf("MSYSTEM must be specified (exec name cannot infer)")
+	if auto == "" && cli == "" {
+		fatal(errors.New("MSYSTEM not specified: rename exe or use -msystem flag"))
 	}
-	if cliValue != "" {
-		v := getMSystemFromName(cliValue)
+	if cli != "" {
+		v := getMSystemFromName(cli)
 		if v == "" {
-			fatalf("invalid MSYSTEM: %s", cliValue)
+			fatal(fmt.Errorf("unsupported MSYSTEM: %s", cli))
 		}
 		return v
 	}
@@ -142,48 +170,83 @@ func resolveMSystem(execName, cliValue string) string {
 }
 
 func validatePathType(pt string) string {
-	pt = strings.ToLower(pt)
-	if !validPathTypes[pt] {
-		fatalf("invalid MSYS2_PATH_TYPE: %s", pt)
+	lower := strings.ToLower(pt)
+	if !validPathTypes[lower] {
+		fatal(fmt.Errorf("invalid path type '%s'", pt))
 	}
-	return pt
-}
-
-func buildMSYSEnv(cfg Config) string {
-	if cfg.WinSymlinks {
-		return "winsymlinks:nativestrict"
-	}
-	return ""
+	return lower
 }
 
 func applyEnv(cfg Config) []string {
+	pt := validatePathType(cfg.PathType)
 	env := os.Environ()
 	env = append(env, "MSYSTEM="+cfg.MSystem)
-	env = append(env, "CHERE_INVOKING=1")
-	env = append(env, "MSYS2_PATH_TYPE="+validatePathType(cfg.PathType))
-	env = append(env, "MSYS="+buildMSYSEnv(cfg))
+	if !cfg.UseHome {
+		env = append(env, "CHERE_INVOKING=1")
+	}
+	env = append(env, "MSYS2_PATH_TYPE="+pt)
+
+	msysVal := ""
+	if cfg.WinSymlinks {
+		msysVal = "winsymlinks:nativestrict"
+	}
+	env = append(env, "MSYS="+msysVal)
 	return env
 }
 
-func buildShellCommand(cfg Config, shellArgs []string) *exec.Cmd {
-	shellPath := filepath.Join(cfg.MsysRoot, "usr", "bin", cfg.LoginShell)
-	workDir := cfg.Wd
-	if workDir == "" {
-		workDir, _ = os.Getwd()
+func resolveSpec() Spec {
+	execPath, err := os.Executable()
+	if err != nil {
+		fatal(fmt.Errorf("failed to get launcher path: %w", err))
 	}
-	finalArgs := append([]string{"-l"}, shellArgs...)
-	cmd := exec.Command(shellPath, finalArgs...)
-	cmd.Dir = workDir
-	cmd.Env = applyEnv(cfg)
+	execName := filepath.Base(execPath)
+
+	cfg := loadJSONConfig(filepath.Join(filepath.Dir(execPath), "msys2_shell.json"))
+	flags, rest := splitOSArgs()
+	cli := parseLauncherFlags(flags)
+	cfg = mergeConfig(cfg, cli)
+
+	if cfg.UseHome && cfg.Wd != "" {
+		fatal(errors.New("exclusive options: -home and -wd cannot be used together"))
+	}
+
+	cfg.MSystem = resolveMSystem(execName, cli.MSystem)
+	if cfg.MsysRoot == "" {
+		fatal(errors.New("missing configuration: msysRoot not specified"))
+	}
+
+	if rest == nil {
+		rest = []string{}
+	}
+	return Spec{Cfg: cfg, ShellArgs: rest}
+}
+
+func buildCmd(s Spec) *exec.Cmd {
+	shellExe := s.Cfg.LoginShell
+	if !strings.HasSuffix(strings.ToLower(shellExe), ".exe") {
+		shellExe += ".exe"
+	}
+
+	shellPath := filepath.Join(s.Cfg.MsysRoot, "usr", "bin", shellExe)
+	if _, err := os.Stat(shellPath); err != nil {
+		fatal(fmt.Errorf("shell not found at %s: %w", shellPath, err))
+	}
+
+	dir := s.Cfg.Wd
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+
+	cmd := exec.Command(shellPath, append([]string{"-l"}, s.ShellArgs...)...)
+	cmd.Dir = dir
+	cmd.Env = applyEnv(s.Cfg)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd
 }
 
-func runShell(cfg Config, shellArgs []string) {
-	cmd := buildShellCommand(cfg, shellArgs)
-
+func runCmd(cmd *exec.Cmd) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan)
 	go func() {
@@ -191,44 +254,16 @@ func runShell(cfg Config, shellArgs []string) {
 		}
 	}()
 
-	if err := cmd.Run(); err != nil {
-		if e, ok := err.(*exec.ExitError); ok {
-			os.Exit(e.ExitCode())
+	err := cmd.Run()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
 		}
-		fatalf("shell error: %v", err)
+		fatal(fmt.Errorf("shell execution failed: %w", err))
 	}
-}
-
-func prepareConfig() (Config, []string) {
-	execPath, err := os.Executable()
-	if err != nil {
-		fatalf("cannot get executable path: %v", err)
-	}
-	execName := filepath.Base(execPath)
-
-	jsonPath := filepath.Join(filepath.Dir(execPath), "msys2_shell.json")
-	jsonCfg, err := loadJSONConfig(jsonPath)
-	if err != nil {
-		fatalf("config load error: %v", err)
-	}
-
-	launcherArgs, shellArgs := splitArgs()
-	cliCfg := parseLauncherFlags(launcherArgs)
-	cfg := mergeConfig(jsonCfg, cliCfg)
-	cfg.MSystem = resolveMSystem(execName, cliCfg.MSystem)
-
-	if cfg.MsysRoot == "" {
-		fatalf("msysroot must be specified")
-	}
-
-	if shellArgs == nil {
-		shellArgs = []string{}
-	}
-
-	return cfg, shellArgs
 }
 
 func main() {
-	cfg, shellArgs := prepareConfig()
-	runShell(cfg, shellArgs)
+	runCmd(buildCmd(resolveSpec()))
 }
