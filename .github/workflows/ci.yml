@@ -21,8 +21,7 @@ jobs:
         set GOOS=windows
         set GOARCH=amd64
         set GOAMD64=v3
-        go build -trimpath -ldflags="-s -w" -o msys2_shell.exe
-        strip --strip-all msys2_shell.exe
+        go build -buildvcs=false -trimpath -ldflags "-s -w"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
