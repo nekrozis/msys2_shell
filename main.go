@@ -16,9 +16,9 @@ type Config struct {
 	LoginShell  string
 	PathType    string
 	MsysRoot    string
-	WinSymlinks bool
 	MSystem     string
 	Wd          string
+	WinSymlinks bool
 	UseHome     bool
 }
 
