@@ -180,10 +180,9 @@ func validatePathType(pt string) string {
 func applyEnv(cfg Config) []string {
 	pt := validatePathType(cfg.PathType)
 	env := os.Environ()
+
 	env = append(env, "MSYSTEM="+cfg.MSystem)
-	if !cfg.UseHome {
-		env = append(env, "CHERE_INVOKING=1")
-	}
+	env = append(env, "CHERE_INVOKING=1")
 	env = append(env, "MSYS2_PATH_TYPE="+pt)
 
 	msysVal := ""
@@ -208,6 +207,14 @@ func resolveSpec() Spec {
 
 	if cfg.UseHome && cfg.Wd != "" {
 		fatal(errors.New("exclusive options: -home and -wd cannot be used together"))
+	}
+
+	if cfg.UseHome {
+		username := os.Getenv("USERNAME")
+		if username == "" {
+			fatal(errors.New("USERNAME not set"))
+		}
+		cfg.Wd = filepath.Join(cfg.MsysRoot, username)
 	}
 
 	cfg.MSystem = resolveMSystem(execName, cli.MSystem)
