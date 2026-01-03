@@ -214,7 +214,7 @@ func resolveSpec() Spec {
 		if username == "" {
 			fatal(errors.New("USERNAME not set"))
 		}
-		cfg.Wd = filepath.Join(cfg.MsysRoot, username)
+		cfg.Wd = filepath.Join(cfg.MsysRoot, "home", username)
 	}
 
 	cfg.MSystem = resolveMSystem(execName, cli.MSystem)
