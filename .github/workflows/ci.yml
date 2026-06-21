@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [ new-rs ]
+  pull_request:
+    branches: [ new-rs ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build executable
+      shell: bash
+      run: |
+        cargo build --release
+        cp target/release/msys2_shell_rs.exe ./msys2_shell.exe
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: msys2_shell
+        path: msys2_shell.exe
+
