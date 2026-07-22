@@ -140,13 +140,15 @@ fn load_json_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     let tmp: JsonConfig = serde_json::from_str(&data).context("parse json config failed")?;
 
     if let Some(shell) = tmp.login_shell
-        && !shell.is_empty() {
-            cfg.login_shell = shell;
-        }
+        && !shell.is_empty()
+    {
+        cfg.login_shell = shell;
+    }
     if let Some(pt) = tmp.path_type
-        && !pt.is_empty() {
-            cfg.path_type = pt;
-        }
+        && !pt.is_empty()
+    {
+        cfg.path_type = pt;
+    }
     if let Some(root) = tmp.msys_root {
         cfg.msys_root = root;
     }
@@ -158,28 +160,33 @@ fn load_json_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 
 fn merge_config(mut base: Config, cli: &CliArgs) -> Config {
     if let Some(shell) = &cli.login_shell
-        && !shell.is_empty() {
-            base.login_shell = shell.clone();
-        }
+        && !shell.is_empty()
+    {
+        base.login_shell = shell.clone();
+    }
     if let Some(pt) = &cli.path_type
-        && !pt.is_empty() {
-            base.path_type = pt.clone();
-        }
+        && !pt.is_empty()
+    {
+        base.path_type = pt.clone();
+    }
     if let Some(root) = &cli.msys_root
-        && !root.is_empty() {
-            base.msys_root = root.clone();
-        }
+        && !root.is_empty()
+    {
+        base.msys_root = root.clone();
+    }
     if cli.win_symlinks {
         base.win_symlinks = true;
     }
     if let Some(wd) = &cli.wd
-        && !wd.is_empty() {
-            base.wd = wd.clone();
-        }
+        && !wd.is_empty()
+    {
+        base.wd = wd.clone();
+    }
     if let Some(msys) = &cli.msystem
-        && !msys.is_empty() {
-            base.msystem = msys.clone();
-        }
+        && !msys.is_empty()
+    {
+        base.msystem = msys.clone();
+    }
     if cli.use_home {
         base.use_home = true;
     }
@@ -190,13 +197,14 @@ fn resolve_msystem(exec_name: &str, cli: &str) -> Result<String> {
     let auto = get_msystem_from_exec_name(exec_name);
 
     if let Some(ref a) = auto
-        && !cli.is_empty() {
-            bail!(
-                "conflict: exec name implies {} but --msystem flag provides {}",
-                a,
-                cli
-            );
-        }
+        && !cli.is_empty()
+    {
+        bail!(
+            "conflict: exec name implies {} but --msystem flag provides {}",
+            a,
+            cli
+        );
+    }
     if auto.is_none() && cli.is_empty() {
         bail!("MSYSTEM not specified: rename exe or use --msystem flag");
     }
@@ -225,7 +233,16 @@ fn resolve_spec() -> Result<Spec> {
         .to_string_lossy()
         .into_owned();
 
-    let json_path = exec_path
+    let real_exe = match fs::read_link(&exec_path) {
+        Ok(target) if target.is_relative() => exec_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target),
+        Ok(target) => target,
+        Err(_) => exec_path.clone(),
+    };
+
+    let json_path = real_exe
         .parent()
         .unwrap_or_else(|| Path::new(""))
         .join("msys2_shell.json");
