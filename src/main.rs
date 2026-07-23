@@ -234,10 +234,6 @@ fn resolve_spec() -> Result<Spec> {
         .into_owned();
 
     let real_exe = match fs::read_link(&exec_path) {
-        Ok(target) if target.is_relative() => exec_path
-            .parent()
-            .unwrap_or_else(|| Path::new(""))
-            .join(target),
         Ok(target) => target,
         Err(_) => exec_path.clone(),
     };
