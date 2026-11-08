@@ -239,10 +239,7 @@ fn resolve_spec() -> Result<Spec> {
         .to_string_lossy()
         .into_owned();
 
-    let real_exe = match fs::read_link(&exec_path) {
-        Ok(target) => target,
-        Err(_) => exec_path.clone(),
-    };
+    let real_exe = fs::canonicalize(&exec_path).unwrap_or_else(|_| exec_path.clone());
 
     let json_path = real_exe
         .parent()
