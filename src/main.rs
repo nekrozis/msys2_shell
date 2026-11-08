@@ -298,12 +298,10 @@ fn build_cmd(s: &Spec) -> Result<Command> {
     }
     cmd.env("MSYS2_PATH_TYPE", validate_path_type(&s.cfg.path_type)?);
 
-    let msys_val = if s.cfg.win_symlinks {
-        "winsymlinks:nativestrict"
-    } else {
-        ""
-    };
-    cmd.env("MSYS", msys_val);
+    // Leave an inherited MSYS value alone unless winsymlinks is requested.
+    if s.cfg.win_symlinks {
+        cmd.env("MSYS", "winsymlinks:nativestrict");
+    }
 
     Ok(cmd)
 }
