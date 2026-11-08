@@ -2,27 +2,57 @@ name: Build
 
 on:
   push:
-    branches: [ new-rs ]
+    branches: [ main ]
   pull_request:
-    branches: [ new-rs ]
+    branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    env:
+      CARGO_INCREMENTAL: "0"
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Build executable
+    - name: Show toolchain
       shell: bash
       run: |
-        cargo build --release
-        cp target/release/msys2_shell_rs.exe ./msys2_shell.exe
+        rustup show
+        rustc -Vv
+        cargo -V
+
+    - name: Build release
+      shell: bash
+      run: |
+        set -euo pipefail
+        cargo build --release --locked
+        cp target/release/msys2_shell_rs.exe msys2_shell.exe
+        sha256sum msys2_shell.exe | tee msys2_shell.exe.sha256
+
+    - name: Verify reproducible build
+      shell: bash
+      run: |
+        set -euo pipefail
+        first=$(sha256sum msys2_shell.exe | cut -d' ' -f1)
+        cargo clean
+        cargo build --release --locked
+        second=$(sha256sum target/release/msys2_shell_rs.exe | cut -d' ' -f1)
+        printf 'first:  %s\nsecond: %s\n' "$first" "$second"
+        test "$first" = "$second"
+        printf '%s  msys2_shell.exe\n' "$first" > msys2_shell.exe.sha256
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: msys2_shell
-        path: msys2_shell.exe
-
+        path: |
+          msys2_shell.exe
+          msys2_shell.exe.sha256
+        if-no-files-found: error
