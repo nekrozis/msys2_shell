@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, bail};
 use lexopt::prelude::*;
-use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,15 +19,6 @@ struct Config {
 struct Spec {
     cfg: Config,
     shell_args: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct JsonConfig {
-    login_shell: Option<String>,
-    path_type: Option<String>,
-    msys_root: Option<String>,
-    win_symlinks: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -126,38 +116,85 @@ fn get_msystem_from_exec_name(exec_name: &str) -> Option<String> {
     get_msystem_from_name(base)
 }
 
-fn load_json_config<P: AsRef<Path>>(path: P) -> Result<Config> {
+fn load_config<P: AsRef<Path>>(path: P) -> Result<Config> {
+    let path = path.as_ref();
     let mut cfg = Config {
         login_shell: "bash".to_string(),
         path_type: "minimal".to_string(),
         ..Default::default()
     };
 
-    let data = match fs::read_to_string(&path) {
+    let data = match fs::read_to_string(path) {
         Ok(data) => data,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(cfg),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let legacy = path.with_file_name("msys2_shell.json");
+            if legacy.exists() {
+                eprintln!(
+                    "warning: {} is no longer read; migrate it to {} (key = value)",
+                    legacy.display(),
+                    path.display()
+                );
+            }
+            return Ok(cfg);
+        }
         Err(e) => return Err(e).context("read config file failed"),
     };
 
-    let tmp: JsonConfig = serde_json::from_str(&data).context("parse json config failed")?;
+    let data = data.strip_prefix('\u{feff}').unwrap_or(&data);
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
 
-    if let Some(shell) = tmp.login_shell
-        && !shell.is_empty()
-    {
-        cfg.login_shell = shell;
+        let (key, value) = line.split_once('=').with_context(|| {
+            format!("{}:{}: expected key = value", path.display(), index + 1)
+        })?;
+        let key = key.trim();
+        let value = unquote(value.trim());
+
+        match key {
+            "msys_root" | "msysRoot" => cfg.msys_root = value.to_string(),
+            "login_shell" | "loginShell" => {
+                if !value.is_empty() {
+                    cfg.login_shell = value.to_string();
+                }
+            }
+            "path_type" | "pathType" => {
+                if !value.is_empty() {
+                    cfg.path_type = value.to_string();
+                }
+            }
+            "win_symlinks" | "winSymlinks" => {
+                cfg.win_symlinks = parse_bool(value).with_context(|| {
+                    format!("{}:{}: invalid win_symlinks value", path.display(), index + 1)
+                })?;
+            }
+            _ => bail!("{}:{}: unknown key '{}'", path.display(), index + 1, key),
+        }
     }
-    if let Some(pt) = tmp.path_type
-        && !pt.is_empty()
-    {
-        cfg.path_type = pt;
-    }
-    if let Some(root) = tmp.msys_root {
-        cfg.msys_root = root;
-    }
-    if let Some(ws) = tmp.win_symlinks {
-        cfg.win_symlinks = ws;
-    }
+
     Ok(cfg)
+}
+
+fn parse_bool(value: &str) -> Result<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => bail!("expected true or false, got '{}'", value),
+    }
+}
+
+fn unquote(value: &str) -> &str {
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2 {
+        let first = bytes[0];
+        let last = bytes[bytes.len() - 1];
+        if (first == b'"' && last == b'"') || (first == b'\'' && last == b'\'') {
+            return &value[1..value.len() - 1];
+        }
+    }
+    value
 }
 
 fn merge_config(mut base: Config, cli: &CliArgs) -> Config {
@@ -263,11 +300,11 @@ fn resolve_spec() -> Result<Spec> {
 
     let real_exe = fs::canonicalize(&exec_path).unwrap_or_else(|_| exec_path.clone());
 
-    let json_path = real_exe
+    let config_path = real_exe
         .parent()
         .unwrap_or_else(|| Path::new(""))
-        .join("msys2_shell.json");
-    let mut cfg = load_json_config(&json_path)?;
+        .join("msys2_shell.conf");
+    let mut cfg = load_config(&config_path)?;
     cfg = merge_config(cfg, &cli);
 
     if cfg.use_home && !cfg.wd.is_empty() {
@@ -276,7 +313,7 @@ fn resolve_spec() -> Result<Spec> {
 
     cfg.msystem = resolve_msystem(&exec_name, &cfg.msystem)?;
     if cfg.msys_root.is_empty() {
-        bail!("missing configuration: msysRoot not specified");
+        bail!("missing configuration: msys_root not specified");
     }
 
     Ok(Spec {

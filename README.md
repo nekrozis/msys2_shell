@@ -7,7 +7,7 @@ An MSYS2 environment launcher written in Rust.
 ## Features
 
 * Detects `MSYSTEM` from the executable name
-* Reads configuration from `msys2_shell.json`
+* Reads configuration from `msys2_shell.conf`
 * Allows command-line options to override configuration
 * Passes arguments to the shell via `--`
 
@@ -34,33 +34,37 @@ msys2.exe     → MSYSTEM=MSYS
 
 ## Configuration
 
-The launcher reads `msys2_shell.json` from the same directory as the executable.
+Optional. The launcher reads `msys2_shell.conf` from the same directory as the
+executable.
 
-### JSON fields
+### Fields
 
-| Key           | Type   | Description                       | Default   |
-| ------------- | ------ | --------------------------------- | --------- |
-| `msysRoot`    | string | Path to MSYS2 installation        | (empty)   |
-| `loginShell`  | string | Shell file name under `/usr/bin`  | `bash`    |
-| `pathType`    | string | `minimal`, `strict`, `inherit`    | `minimal` |
-| `winSymlinks` | bool   | Enable `winsymlinks:nativestrict` | `false`   |
+| Key            | Type   | Description                       | Default   |
+| -------------- | ------ | --------------------------------- | --------- |
+| `msys_root`    | string | Path to MSYS2 installation        | (empty)   |
+| `login_shell`  | string | Shell file name under `/usr/bin`  | `bash`    |
+| `path_type`    | string | `minimal`, `strict`, `inherit`    | `minimal` |
+| `win_symlinks` | bool   | Enable `winsymlinks:nativestrict` | `false`   |
 
 Example:
 
-```json
-{
-  "msysRoot": "C:\\msys64",
-  "loginShell": "bash",
-  "pathType": "minimal",
-  "winSymlinks": false
-}
+```ini
+# msys2_shell.conf
+msys_root = C:\msys64
+login_shell = bash
+path_type = minimal
+win_symlinks = false
 ```
+
+Lines starting with `#` or `;` are comments. Values may be quoted when they
+contain spaces. Unknown keys are rejected. The old `msys2_shell.json` is no
+longer read; migrate it to `msys2_shell.conf`.
 
 ---
 
 ## Command-line options
 
-Command-line flags override JSON configuration.
+Command-line flags override the config file.
 
 ```
 --msysroot string
