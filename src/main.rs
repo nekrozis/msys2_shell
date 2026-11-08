@@ -328,7 +328,14 @@ fn build_cmd(s: &Spec) -> Result<Command> {
 }
 
 fn run_cmd(mut cmd: Command) -> Result<()> {
-    let status = cmd.status().context("shell execution failed")?;
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    let dir = cmd
+        .get_current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| ".".to_string());
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to start {} in {}", program, dir))?;
     if let Some(code) = status.code() {
         exit(code);
     }
