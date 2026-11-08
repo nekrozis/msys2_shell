@@ -230,6 +230,8 @@ fn validate_path_type(pt: &str) -> Result<String> {
 }
 
 fn resolve_spec() -> Result<Spec> {
+    let cli = CliArgs::parse()?;
+
     let exec_path = env::current_exe().context("failed to get launcher path")?;
     let exec_name = exec_path
         .file_name()
@@ -247,8 +249,6 @@ fn resolve_spec() -> Result<Spec> {
         .unwrap_or_else(|| Path::new(""))
         .join("msys2_shell.json");
     let mut cfg = load_json_config(&json_path)?;
-
-    let cli = CliArgs::parse()?;
     cfg = merge_config(cfg, &cli);
 
     if cfg.use_home && !cfg.wd.is_empty() {
