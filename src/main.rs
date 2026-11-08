@@ -223,6 +223,26 @@ fn resolve_msystem(exec_name: &str, cli: &str) -> Result<String> {
     }
 }
 
+fn validate_shell_name(shell: &str) -> Result<()> {
+    let has_drive_prefix = shell.len() >= 2
+        && shell.as_bytes()[0].is_ascii_alphabetic()
+        && shell.as_bytes()[1] == b':';
+
+    if shell.is_empty()
+        || shell == "."
+        || shell == ".."
+        || shell.contains('/')
+        || shell.contains('\\')
+        || has_drive_prefix
+    {
+        bail!(
+            "login shell must be a file name under usr/bin, got '{}'",
+            shell
+        );
+    }
+    Ok(())
+}
+
 fn validate_path_type(pt: &str) -> Result<String> {
     let lower = pt.to_lowercase();
     match lower.as_str() {
@@ -266,6 +286,8 @@ fn resolve_spec() -> Result<Spec> {
 }
 
 fn build_cmd(s: &Spec) -> Result<Command> {
+    validate_shell_name(&s.cfg.login_shell)?;
+
     let mut shell_exe = s.cfg.login_shell.clone();
     if !shell_exe.to_lowercase().ends_with(".exe") {
         shell_exe.push_str(".exe");

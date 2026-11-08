@@ -41,7 +41,7 @@ The launcher reads `msys2_shell.json` from the same directory as the executable.
 | Key           | Type   | Description                       | Default   |
 | ------------- | ------ | --------------------------------- | --------- |
 | `msysRoot`    | string | Path to MSYS2 installation        | (empty)   |
-| `loginShell`  | string | Shell under `/usr/bin`            | `bash`    |
+| `loginShell`  | string | Shell file name under `/usr/bin`  | `bash`    |
 | `pathType`    | string | `minimal`, `strict`, `inherit`    | `minimal` |
 | `winSymlinks` | bool   | Enable `winsymlinks:nativestrict` | `false`   |
 
