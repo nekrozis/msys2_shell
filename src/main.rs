@@ -292,7 +292,7 @@ fn build_cmd(s: &Spec) -> Result<Command> {
     };
 
     let mut cmd = Command::new(&shell_path);
-    cmd.arg("-l").args(&s.shell_args);
+    cmd.arg("--login").args(&s.shell_args);
     cmd.current_dir(dir);
 
     cmd.env("MSYSTEM", &s.cfg.msystem);
