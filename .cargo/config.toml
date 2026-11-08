@@ -1,0 +1,10 @@
+# MSVC-only release settings.
+# /Brepro makes the PE image deterministic; +crt-static removes the VC++
+# runtime dependency.  These are link.exe options, so they are scoped to the
+# MSVC target and are not applied to the GNU target.
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=/Brepro",
+    "-C", "link-arg=/DEBUG:NONE",
+]
