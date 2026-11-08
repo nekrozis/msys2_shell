@@ -255,15 +255,6 @@ fn resolve_spec() -> Result<Spec> {
         bail!("exclusive options: --home and --wd cannot be used together");
     }
 
-    if cfg.use_home {
-        let username = env::var("USERNAME").context("USERNAME not set")?;
-        cfg.wd = Path::new(&cfg.msys_root)
-            .join("home")
-            .join(username)
-            .to_string_lossy()
-            .into_owned();
-    }
-
     cfg.msystem = resolve_msystem(&exec_name, &cfg.msystem)?;
     if cfg.msys_root.is_empty() {
         bail!("missing configuration: msysRoot not specified");
@@ -300,7 +291,11 @@ fn build_cmd(s: &Spec) -> Result<Command> {
     cmd.current_dir(dir);
 
     cmd.env("MSYSTEM", &s.cfg.msystem);
-    cmd.env("CHERE_INVOKING", "1");
+    // With --home, leave CHERE_INVOKING unset so the login profile can cd to
+    // the shell's real home instead of a guessed path.
+    if !s.cfg.use_home {
+        cmd.env("CHERE_INVOKING", "1");
+    }
     cmd.env("MSYS2_PATH_TYPE", validate_path_type(&s.cfg.path_type)?);
 
     let msys_val = if s.cfg.win_symlinks {
