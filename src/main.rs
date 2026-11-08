@@ -81,7 +81,7 @@ impl CliArgs {
                     args.win_symlinks = true;
                 }
                 Long("help") | Short('h') => {
-                    println!("Usage: msys2_shell [OPTIONS] [--] [SHELL_ARGS]...");
+                    println!("Usage: msys2_shell [OPTIONS] [SHELL_ARGS]...");
                     println!();
                     println!("Options:");
                     println!("  --msysroot <DIR>   MSYS2 root path");
@@ -92,6 +92,8 @@ impl CliArgs {
                     println!("  --home             start in home directory; not with --wd");
                     println!("  --winsymlinks      enable winsymlinks");
                     println!("  -h, --help         Print help");
+                    println!();
+                    println!("Positional arguments are passed to the shell; use -- before arguments that start with '-'.");
                     exit(0);
                 }
                 Value(val) => {

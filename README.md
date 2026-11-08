@@ -82,7 +82,7 @@ Command-line flags override JSON configuration.
         start in home directory; not with --wd
 ```
 
-Arguments after `--` are passed to the shell.
+Positional arguments are passed to the shell. Use `--` before arguments that start with `-`, for example `-c`.
 
 ---
 
