@@ -195,26 +195,30 @@ fn merge_config(mut base: Config, cli: &CliArgs) -> Config {
 
 fn resolve_msystem(exec_name: &str, cli: &str) -> Result<String> {
     let auto = get_msystem_from_exec_name(exec_name);
-
-    if let Some(ref a) = auto
-        && !cli.is_empty()
-    {
-        bail!(
-            "conflict: exec name implies {} but --msystem flag provides {}",
-            a,
-            cli
-        );
-    }
-    if auto.is_none() && cli.is_empty() {
-        bail!("MSYSTEM not specified: rename exe or use --msystem flag");
-    }
-    if !cli.is_empty() {
+    let cli_system = if cli.is_empty() {
+        None
+    } else {
         match get_msystem_from_name(cli) {
-            Some(v) => return Ok(v),
+            Some(v) => Some(v),
             None => bail!("unsupported MSYSTEM: {}", cli),
         }
+    };
+
+    match (auto, cli_system) {
+        (Some(a), Some(c)) => {
+            if a != c {
+                bail!(
+                    "conflict: exec name implies {} but --msystem flag provides {}",
+                    a,
+                    c
+                );
+            }
+            Ok(c)
+        }
+        (Some(a), None) => Ok(a),
+        (None, Some(c)) => Ok(c),
+        (None, None) => bail!("MSYSTEM not specified: rename exe or use --msystem flag"),
     }
-    Ok(auto.unwrap())
 }
 
 fn validate_path_type(pt: &str) -> Result<String> {
